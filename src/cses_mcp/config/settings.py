@@ -2,15 +2,24 @@
 Configuration settings for the CSES MCP server.
 """
 
+from pathlib import Path
+
 from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
+
+# Anchored to the project root rather than left relative, since relative
+# paths are resolved against the process's current working directory —
+# which callers that spawn this server (e.g. Claude Desktop's "uv run
+# --project ..." config) don't set to the project root.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     model_config = ConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
