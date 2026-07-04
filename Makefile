@@ -56,7 +56,7 @@ run-sse:
 	uv run python -m cses_mcp.main --transport sse --port 8000
 
 run-inspector:
-	uv run fastmcp dev inspector -m cses_mcp.main
+	uv run fastmcp dev inspector -m cses_mcp.main --no-reload
 
 build:
 	uv build
