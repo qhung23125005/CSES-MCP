@@ -22,42 +22,98 @@ def _parse_status(li) -> str:
     return "not completed"
 
 
-def _parse_problems(html: str) -> list[dict]:
+def _parse_problems(
+    html: str, filter_category: str | None, filter_status: str | None
+) -> list[dict]:
     """Pure parsing step, kept separate from the network call so it's unit-testable."""
     soup = BeautifulSoup(html, "lxml")
 
+    filter_category_norm = filter_category.strip().lower() if filter_category else None
+    filter_status_norm = filter_status.strip().lower() if filter_status else None
+
     problems = []
     for h2 in soup.find_all("h2"):
+        category = h2.get_text().strip()
+
         # The first h2 is General -> Skip it
-        if h2.get_text() == "General":
+        if category == "General":
+            continue
+
+        # If category is passed as an argument, check (case/whitespace-insensitive)
+        if filter_category_norm and category.lower() != filter_category_norm:
             continue
 
         # Next to the h2 is the list of problems --> Get the next one
         ul = h2.find_next_sibling("ul", class_="task-list")
         if ul is None:
             continue
-        category = h2.get_text()
 
         # Loop through all the problems
         for li in ul.find_all("li", class_="task"):
             a = li.find("a")
             if a is None:
                 continue
+
+            status = _parse_status(li)
+            if filter_status_norm and status != filter_status_norm:
+                continue
+
             problems.append({
                 "name": a.get_text(),
                 "link": settings.cses_base_url + a["href"],
-                "status": _parse_status(li),
+                "status": status,
                 "category": category
             })
 
     return problems
 
 
-@mcp.tool
-async def fetch_problems() -> list[dict]:
+@mcp.tool(
+    tags={"fetch_data"},
+    meta={"version": "0.0.1"}
+)
+async def fetch_problems(category: str | None = None, status: str | None = None) -> list[dict]:
     """
-    Fetches the list of available CSES problems.
-    Uses the server-configured CSES session cookie (PHPSESSID) for authentication.
+    Fetch every problem listed on the CSES problem set page, grouped by category.
+
+    This scrapes https://cses.fi/problemset/ (or the configured CSES_BASE_URL) and
+    returns each problem's name, link, category, and the current user's completion
+    status for it. Use this tool when the user wants to browse/list CSES problems,
+    find problems in a specific category (e.g. "Sorting and Searching", "Graph
+    Algorithms"), or check which problems they have/haven't solved yet.
+
+    Args:
+        category: Optional category name to filter by, e.g. "Sorting and Searching"
+            or "Graph Algorithms". Matching is case-insensitive and ignores
+            surrounding whitespace. If omitted, problems from all categories are
+            returned.
+        status: Optional completion status to filter by. Must be one of
+            "completed", "not accepted", or "not completed" (case-insensitive).
+            If omitted, problems with any status are returned.
+
+    Authentication:
+        Requires a valid CSES session cookie (PHPSESSID) configured on the server
+        via the .env file. This is the same cookie your browser sends when logged
+        into cses.fi, and it determines whose solve status is reported. If it is
+        missing or has expired, this tool returns an error dict instead of raising.
+
+    Returns:
+        On success, a list of dicts, one per problem, each shaped like:
+            {
+                "name": str,      # Problem title, e.g. "Weird Algorithm"
+                "link": str,      # Absolute URL to the problem page
+                "status": str,    # One of "completed", "not accepted", "not completed"
+                "category": str,  # Section heading on the problem set page,
+                                  # e.g. "Introductory Problems", "Sorting and Searching"
+            }
+        The "General" section on the page (site info, not real problems) is
+        excluded. Problem order follows the page's natural order.
+
+        On failure (e.g. missing/expired session cookie, network error, or the
+        CSES page structure changing), returns a single error dict from
+        error_handler.handle_tool_error with keys "error", "error_code",
+        "message", "timestamp", "tool_name", "tool_args", and "details" — check
+        for `"error": True` before treating the result as a problem list.
     """
     try:
         if not settings.phpsessid:
@@ -71,6 +127,7 @@ async def fetch_problems() -> list[dict]:
             response = await client.get(BASE_URL)
             response.raise_for_status()
 
-        return _parse_problems(response.text)
+        return _parse_problems(response.text, category, status)
     except Exception as e:
         return error_handler.handle_tool_error("fetch_problems", e, {})
+    
