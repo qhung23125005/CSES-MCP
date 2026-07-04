@@ -40,7 +40,3 @@ def main() -> None:
         raise
     finally:
         logger.info("Server shutdown complete")
-
-
-if __name__ == "__main__":
-    main()

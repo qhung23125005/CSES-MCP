@@ -13,6 +13,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # Server Configuration
@@ -33,6 +34,9 @@ class Settings(BaseSettings):
     # CSES Configuration
     cses_base_url: str = Field(default="https://cses.fi", description="Base URL for CSES")
     request_timeout: int = Field(default=30, description="HTTP request timeout in seconds")
+    phpsessid: str | None = Field(
+        default=None, description="CSES session cookie (PHPSESSID) used for authenticated requests"
+    )
 
 
 # Global settings instance

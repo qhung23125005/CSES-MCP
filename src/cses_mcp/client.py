@@ -13,10 +13,8 @@ async def main():
         tools = await client.list_tools()
         print(f"Registered tools: {[t.name for t in tools]}")
 
-        # Call the tool
-        response = await client.call_tool(
-            "fetch_problems",
-        )
+        # Call the tool (session cookie comes from the server's own .env)
+        response = await client.call_tool("fetch_problems")
         print(f"Tool response: {response.data}")
 
 if __name__ == "__main__":

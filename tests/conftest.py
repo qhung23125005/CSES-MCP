@@ -3,8 +3,11 @@ Pytest configuration and fixtures for CSES MCP server tests.
 """
 
 import pytest
+from dotenv import load_dotenv
 
 from src.cses_mcp.config.settings import Settings
+
+load_dotenv()
 
 
 @pytest.fixture
