@@ -67,6 +67,93 @@ def _parse_problems(
 
     return problems
 
+def _parse_limits(soup: BeautifulSoup) -> dict[str, str]:
+    """
+    Extract the time/memory limit box: <ul class="task-constraints">
+    <li><b>Time limit:</b> 1.00 s</li><li><b>Memory limit:</b> 512 MB</li></ul>
+    Returns e.g. {"time_limit": "1.00 s", "memory_limit": "512 MB"}.
+    """
+    limits: dict[str, str] = {}
+    ul = soup.find("ul", class_="task-constraints")
+    if ul is None:
+        return limits
+
+    for li in ul.find_all("li"):
+        b_tag = li.find("b")
+        if b_tag is None:
+            continue
+
+        label = b_tag.text.strip().rstrip(":").lower().replace(" ", "_")
+        value = (b_tag.next_sibling or "").strip()
+        limits[label] = value
+
+    return limits
+
+
+def _parse_description(soup: BeautifulSoup) -> str:
+    """
+    Extract the narrative problem description: every top-level child of
+    <div class="md"> before the first <h1> (which marks the start of the
+    "Input" section). Some problems have multiple <p> tags here, not just one.
+    """
+    md = soup.find("div", class_="md")
+    if md is None:
+        return ""
+
+    paragraphs = []
+    for child in md.find_all(recursive=False):
+        if child.name == "h1":
+            break
+
+        paragraphs.append(child.get_text().strip())
+
+    return "\n\n".join(p for p in paragraphs if p)
+
+
+def _parse_sections(soup: BeautifulSoup) -> dict[str, str]:
+    """
+    Extract each <h1>-delimited section inside <div class="md"> that comes
+    after the description, e.g. "Input", "Output", "Constraints", "Example".
+    Returns {section_name_lowercased: section_text}, so e.g.
+    {"input": "...", "output": "...", "constraints": "1 \\le n \\le 10^6", "example": "..."}.
+    """
+    md = soup.find("div", class_="md")
+    if md is None:
+        return {}
+
+    sections: dict[str, str] = {}
+    current_name: str | None = None
+    current_parts: list[str] = []
+
+    for child in md.find_all(recursive=False):
+        if child.name == "h1":
+            if current_name is not None:
+                sections[current_name] = "\n\n".join(p for p in current_parts if p)
+            current_name = child.get_text().strip().lower()
+            current_parts = []
+        elif current_name is not None:
+            current_parts.append(child.get_text().strip())
+
+    if current_name is not None:
+        sections[current_name] = "\n\n".join(p for p in current_parts if p)
+
+    return sections
+
+
+def _parse_statement(html: str) -> dict:
+    """Pure parsing step, kept separate from the network call so it's unit-testable."""
+    soup = BeautifulSoup(html, "lxml")
+
+    limits = _parse_limits(soup)
+    sections = _parse_sections(soup)
+
+    return {
+        "Title": soup.find("h1").get_text().strip(),
+        "Limit": limits,
+        "description": _parse_description(soup),
+        "sections": sections
+    }
+
 
 @mcp.tool(
     tags={"fetch_data", "fetch_problems"},
@@ -136,4 +223,46 @@ async def fetch_problems(category: str | None = None, status: str | None = None)
     meta={"version": "0.0.1"}
 )
 async def fetch_problem_statement(url: str) -> dict:
-    pass
+    """
+    Fetch a single CSES problem's statement, given its problem page URL.
+
+    This scrapes a problem page (e.g. one of the links returned by
+    `fetch_problems`, such as https://cses.fi/problemset/task/1068) and returns
+    its title, time/memory limits, narrative description, and the Input,
+    Output, Constraints, and Example sections. This is public data — no
+    session cookie is required. Math notation in the description/sections is
+    returned as its raw LaTeX source (e.g. "n \\le 10^6"), not rendered.
+
+    Args:
+        url: Absolute URL to a CSES problem page, e.g.
+            "https://cses.fi/problemset/task/1068".
+
+    Returns:
+        On success, a dict shaped like:
+            {
+                "title": str,          # e.g. "Weird Algorithm"
+                "time_limit": str,     # e.g. "1.00 s"
+                "memory_limit": str,   # e.g. "512 MB"
+                "description": str,    # narrative problem statement
+                "input": str,          # description of the input format
+                "output": str,         # description of the output format
+                "constraints": str,    # e.g. "1 \\le n \\le 10^6"
+                "example": str,        # sample input/output as shown on the page
+            }
+        Any of the section values may be None if that section doesn't appear
+        on the page (e.g. interactive problems format Input/Output differently).
+
+        On failure (e.g. invalid URL, network error, or the CSES page
+        structure changing), returns a single error dict from
+        error_handler.handle_tool_error with keys "error", "error_code",
+        "message", "timestamp", "tool_name", "tool_args", and "details" — check
+        for `"error": True` before treating the result as a statement.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+
+        return _parse_statement(response.text)
+    except Exception as e:
+        return error_handler.handle_tool_error("fetch_problem_statement", e, {"url": url})

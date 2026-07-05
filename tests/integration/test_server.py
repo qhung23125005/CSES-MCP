@@ -12,7 +12,7 @@ from fastmcp import Client
 from src.cses_mcp.config.settings import settings
 from src.cses_mcp.server import mcp
 
-FIXTURE_HTML = (
+PROBLEMSET_HTML = (
     Path(__file__).parent.parent / "fixtures" / "cses_problemset_sample.html"
 ).read_text(encoding="utf-8")
 
@@ -33,7 +33,7 @@ class TestServerIntegration:
         monkeypatch.setattr(settings, "phpsessid", "test-cookie-value")
 
         def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text=FIXTURE_HTML)
+            return httpx.Response(200, text=PROBLEMSET_HTML)
 
         mock_transport = httpx.MockTransport(handler)
         monkeypatch.setattr(

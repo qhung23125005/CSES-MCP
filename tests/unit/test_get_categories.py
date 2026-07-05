@@ -14,7 +14,7 @@ import pytest
 
 from src.cses_mcp.tools.fetch_categories_tools import fetch_categories
 
-FIXTURE_HTML = (
+PROBLEMSET_HTML = (
     Path(__file__).parent.parent / "fixtures" / "cses_problemset_sample.html"
 ).read_text(encoding="utf-8")
 
@@ -29,7 +29,7 @@ def _mock_client(html: str) -> functools.partial:
 class TestFetchCategories:
     @pytest.mark.asyncio
     async def test_returns_categories_excluding_general(self, monkeypatch):
-        monkeypatch.setattr(httpx, "AsyncClient", _mock_client(FIXTURE_HTML))
+        monkeypatch.setattr(httpx, "AsyncClient", _mock_client(PROBLEMSET_HTML))
 
         categories = await fetch_categories()
 
