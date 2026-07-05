@@ -140,14 +140,14 @@ class TestFetchProblemsLiveSmoke:
     """
     Tier 3: manual, opt-in smoke test against the real CSES site.
 
-    Skipped unless PHPSESSID is set (via the server's .env). Not run as part
-    of the default `make test` since it requires a real, unexpired session
-    cookie and hits the live network.
+    Skipped unless RUN_LIVE_TESTS=1 is set AND a real PHPSESSID is configured
+    (via the server's .env). Not run as part of the default `make test` since
+    it requires a real, unexpired session cookie and hits the live network.
     """
 
     @pytest.mark.skipif(
-        not settings.phpsessid,
-        reason="requires a real PHPSESSID configured in .env",
+        os.environ.get("RUN_LIVE_TESTS") != "1" or not settings.phpsessid,
+        reason="set RUN_LIVE_TESTS=1 and a real PHPSESSID in .env to run this test",
     )
     @pytest.mark.asyncio
     async def test_fetch_problems_against_live_site(self):
