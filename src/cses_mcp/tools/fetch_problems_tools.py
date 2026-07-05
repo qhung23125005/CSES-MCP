@@ -69,7 +69,7 @@ def _parse_problems(
 
 
 @mcp.tool(
-    tags={"fetch_data"},
+    tags={"fetch_data", "fetch_problems"},
     meta={"version": "0.0.1"}
 )
 async def fetch_problems(category: str | None = None, status: str | None = None) -> list[dict]:
@@ -131,3 +131,9 @@ async def fetch_problems(category: str | None = None, status: str | None = None)
     except Exception as e:
         return error_handler.handle_tool_error("fetch_problems", e, {})
     
+@mcp.tool(
+    tags={"fetch_data", "fetch_statement"},
+    meta={"version": "0.0.1"}
+)
+async def fetch_problem_statement(url: str) -> dict:
+    pass

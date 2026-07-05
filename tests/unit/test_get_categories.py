@@ -1,5 +1,5 @@
 """
-Tests for the fetch_categories resource: HTTP mocked against the local
+Tests for the fetch_categories tool: HTTP mocked against the local
 fixture so no real network call is made and the assertions don't depend
 on CSES's live site content, plus an opt-in smoke test against the real
 CSES server.
@@ -12,8 +12,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from src.cses_mcp.handlers.error_handler import CSESScrapeError
-from src.cses_mcp.resources.cses_categories import fetch_categories
+from src.cses_mcp.tools.fetch_categories_tools import fetch_categories
 
 FIXTURE_HTML = (
     Path(__file__).parent.parent / "fixtures" / "cses_problemset_sample.html"
@@ -37,11 +36,13 @@ class TestFetchCategories:
         assert categories == ["Introductory Problems", "Sorting and Searching"]
 
     @pytest.mark.asyncio
-    async def test_raises_scrape_error_when_no_categories_found(self, monkeypatch):
+    async def test_returns_scrape_error_when_no_categories_found(self, monkeypatch):
         monkeypatch.setattr(httpx, "AsyncClient", _mock_client("<html><body></body></html>"))
 
-        with pytest.raises(CSESScrapeError):
-            await fetch_categories()
+        result = await fetch_categories()
+
+        assert result["error"] is True
+        assert result["error_code"] == "CSES_SCRAPE_STRUCTURE_CHANGED"
 
 
 class TestFetchCategoriesLiveSmoke:
