@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div class="content-wrapper">
+<div class="content">
+<table class="summary-table left-align narrow"><caption>Submission details</caption><tr><td >Task:</td><td ><a href="/problemset/task/1068/">Weird Algorithm</a></td></tr>
+<tr><td >Sender:</td><td >dogedicode</td></tr>
+<tr><td >Submission time:</td><td >2026-07-06 11:38:38 +0300</td></tr>
+<tr><td >Language:</td><td >Python3 (PyPy3)</td></tr>
+<tr><td >Status:</td><td ><span id="status">READY</span></td></tr>
+<tr><td >Result:</td><td ><span class="inline-score verdict ac">ACCEPTED</span></td></tr>
+</table>
+<table class="narrow closeable">
+<caption class="close-trigger">Test&nbsp;results</caption><colgroup><col class="small-col"><col><col class="brief-col"><col class="details-col"></colgroup>
+<thead><tr><th >test</th><th >verdict</th><th >time</th><th ></th></tr>
+</thead><tr><td >#1</td><td class="verdict ac">ACCEPTED</td><td >0.04 s</td><td ><a class="details-link" href="#test1">details</a></td></tr>
+<tr><td >#2</td><td class="verdict ac">ACCEPTED</td><td >0.04 s</td><td ><a class="details-link" href="#test2">details</a></td></tr>
+</table>
+<div class="closeable"><h3 class="caption close-trigger">Code</h3><div><script src="/lib/google-code-prettify/run_prettify.js"></script><pre class="prettyprint linenums  resize-horizontal lang-python" style="">n = int(input())
+result = [n]
+while n != 1:
+    if n % 2 == 0:
+        n //= 2
+    else:
+        n = 3 * n + 1
+    result.append(n)
+print(*result)
+</pre></div></div>
+</div>
+</div>
+</body>
+</html>

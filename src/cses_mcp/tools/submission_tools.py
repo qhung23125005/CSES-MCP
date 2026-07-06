@@ -10,6 +10,7 @@ from pathlib import Path
 logger = setup_logger("cses_mcp.tools.submission_tools")
 
 BASE_URL = f"{settings.cses_base_url}/problemset/submit"
+RESULT_URL = f"{settings.cses_base_url}/problemset/result"
 EXTENSION_TO_LANG = {
     ".asm": "Assembly",
     ".c": "C",
@@ -122,8 +123,135 @@ async def submit_code(task_id: str, filename: str, code: str) -> dict:
     except Exception as e:
         return error_handler.handle_tool_error("submit_code", e, {"task_id": task_id})
     
-# @mcp.tool(
-#     tags={"submission_tool", "fetch_submission"},
-#     meta={"version": "0.0.1"}
-# )
-# async def fetch_submission(submission_id: str):
+def _parse_summary(soup: BeautifulSoup) -> dict:
+    """Parse the "Submission details" table into a dict."""
+    table = soup.find("table", class_="summary-table")
+    if table is None:
+        raise CSESScrapeError(
+            "Could not find the submission details table; the CSES page "
+            "structure may have changed or the submission id is invalid.",
+            error_code="SUBMISSION_NOT_FOUND",
+        )
+
+    summary: dict = {}
+    for row in table.find_all("tr"):
+        label_cell, value_cell = row.find_all("td")
+        label = label_cell.get_text(strip=True).rstrip(":")
+
+        if label == "Task":
+            link_tag = value_cell.find("a")
+            summary["task"] = {
+                "name": link_tag.get_text(strip=True),
+                "link": settings.cses_base_url + link_tag["href"],
+            }
+        elif label == "Result":
+            span = value_cell.find("span")
+            summary["result"] = span.get_text(strip=True) if span else None
+        elif label == "Status":
+            span = value_cell.find("span")
+            summary["status"] = span.get_text(strip=True) if span else value_cell.get_text(strip=True)
+        else:
+            key = label.lower().replace(" ", "_")
+            summary[key] = value_cell.get_text(strip=True)
+
+    return summary
+
+
+def _parse_test_results(soup: BeautifulSoup) -> list[dict]:
+    """Parse the "Test results" table (test id, verdict, time per test case)."""
+    for table in soup.find_all("table", class_="narrow"):
+        caption = table.find("caption")
+        if caption and caption.get_text(strip=True).replace("\xa0", " ") == "Test results":
+            target_table = table
+            break
+    else:
+        return []
+
+    results = []
+    for row in target_table.find_all("tr"):
+        if row.find("th"):
+            continue
+        cells = row.find_all("td")
+        results.append({
+            "test": cells[0].get_text(strip=True),
+            "verdict": cells[1].get_text(strip=True),
+            "time": cells[2].get_text(strip=True),
+        })
+
+    return results
+
+
+def _parse_code(soup: BeautifulSoup) -> str | None:
+    """Parse the submitted source code out of the <pre class="prettyprint"> block."""
+    pre = soup.find("pre", class_="prettyprint")
+    return pre.get_text().strip() if pre else None
+
+
+def _parse_submission(html: str) -> dict:
+    """Pure parsing step, kept separate from the network call so it's unit-testable."""
+    soup = BeautifulSoup(html, "lxml")
+
+    submission = _parse_summary(soup)
+    submission["tests"] = _parse_test_results(soup)
+    submission["code"] = _parse_code(soup)
+
+    return submission
+
+
+@mcp.tool(
+    tags={"submission_tool", "fetch_submission"},
+    meta={"version": "0.0.1"}
+)
+async def fetch_submission(submission_id: str) -> dict:
+    """
+    Fetch a past submission's details, per-test verdicts, and submitted code.
+
+    Scrapes https://cses.fi/problemset/result/{submission_id}/ — this only
+    works for your own submissions, since CSES only exposes submitted source
+    code to the submission's owner. Use this after `submit_code` to check
+    whether a submission has been judged yet and what the verdict was, or to
+    review a past attempt.
+
+    Args:
+        submission_id: The submission id, e.g. the "submission_id" returned
+            by `submit_code`, or the id in a result URL like
+            https://cses.fi/problemset/result/17833364/.
+
+    Returns:
+        On success, a dict shaped like:
+            {
+                "task": {"name": str, "link": str},
+                "sender": str,
+                "submission_time": str,
+                "language": str,
+                "status": str,         # e.g. "READY", "PENDING", "COMPILING"
+                "result": str | None,  # e.g. "ACCEPTED", "WRONG ANSWER";
+                                        # None if not yet judged
+                "tests": [{"test": str, "verdict": str, "time": str}, ...],
+                "code": str | None,    # the submitted source code
+            }
+
+        On failure (missing/expired session cookie, invalid submission id,
+        network error, or the CSES page structure changing), returns a
+        single error dict from error_handler.handle_tool_error with keys
+        "error", "error_code", "message", "timestamp", "tool_name",
+        "tool_args", and "details" — check for `"error": True` before
+        treating the result as submission data.
+    """
+    try:
+        if not settings.phpsessid:
+            raise CSESAuthError(
+                "No CSES session cookie configured. Set PHPSESSID in the server's .env.",
+                error_code="CSES_NOT_AUTHENTICATED",
+            )
+
+        cookies = {"PHPSESSID": settings.phpsessid}
+        async with httpx.AsyncClient(cookies=cookies, timeout=settings.request_timeout) as client:
+            response = await client.get(f"{RESULT_URL}/{submission_id}/")
+            response.raise_for_status()
+
+        return _parse_submission(response.text)
+    except Exception as e:
+        return error_handler.handle_tool_error(
+            "fetch_submission", e, {"submission_id": submission_id}
+        )
