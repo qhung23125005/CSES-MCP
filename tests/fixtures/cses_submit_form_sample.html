@@ -1,0 +1,17 @@
+<html>
+<body>
+<form action="/course/send.php" method="post" enctype="multipart/form-data">
+<input type="hidden" name="csrf_token" value="fake-csrf-token-abc123">
+<input type="hidden" name="task" value="1068">
+<input type="file" name="file" onchange="check(this)">
+<select name="lang" id="lang">
+<option value="">?</option>
+<option value="Python3">Python3</option>
+<option value="C++">C++</option>
+</select>
+<input type="submit" value="Submit">
+<input type="hidden" name="type" value="course">
+<input type="hidden" name="target" value="problemset">
+</form>
+</body>
+</html>
