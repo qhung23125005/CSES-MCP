@@ -133,7 +133,7 @@ class TestParseSubmission:
             "name": "Weird Algorithm",
             "link": "https://cses.fi/problemset/task/1068/",
         }
-        assert submission["sender"] == "dogedicode"
+        assert submission["sender"] == "testuser"
         assert submission["submission_time"] == "2026-07-06 11:38:38 +0300"
         assert submission["language"] == "Python3 (PyPy3)"
         assert submission["status"] == "READY"
