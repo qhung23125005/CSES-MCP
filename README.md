@@ -36,16 +36,15 @@ you're editing the code.
 
 ### Option A — Copy-paste (no local clone)
 
-Paste this straight into your MCP client config. `uvx` fetches, builds, and
-runs the server directly from GitHub — no `git clone`, no `uv sync`, no
-`.env` file to manage.
+Paste this straight into your MCP client config — `uvx` fetches and runs
+the published package, no clone, no `uv sync`, no `.env` file to manage:
 
 ```json
 {
   "mcpServers": {
     "cses-mcp": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/qhung23125005/CSES-MCP", "cses-mcp"],
+      "args": ["qhung-cses-mcp@latest"],
       "env": {
         "PHPSESSID": "<your CSES session cookie>"
       }
@@ -66,6 +65,37 @@ Requirements:
   [Getting your CSES session cookie](#getting-your-cses-session-cookie).
 
 Restart your MCP client and the tools are available — that's it.
+
+<details>
+<summary>Not on PyPI yet, or want to track the repo directly instead?</summary>
+
+Point `--from` at a plain HTTPS archive of the repo instead of the
+published package — still no `git clone`, no `uv sync`, and (unlike a
+`git+` URL) no local `git` executable required at all, which matters if
+your MCP client runs in a sandboxed environment (e.g. Claude Desktop's
+Windows package can't execute `git` even when it's installed and on
+`PATH`):
+
+```json
+{
+  "mcpServers": {
+    "cses-mcp": {
+      "command": "uvx",
+      "args": ["--from", "https://github.com/qhung23125005/CSES-MCP/archive/refs/heads/master.tar.gz", "qhung-cses-mcp"],
+      "env": {
+        "PHPSESSID": "<your CSES session cookie>"
+      }
+    }
+  }
+}
+```
+
+A `--from git+https://github.com/qhung23125005/CSES-MCP` URL also works if
+you want it to always resolve via git instead, but that requires a working
+local `git` that your MCP client's process can actually execute — see
+[Option B](#option-b--manual-clone-for-local-development--editing-the-code)
+if neither of these is reliable in your environment.
+</details>
 
 ### Option B — Manual clone (for local development / editing the code)
 

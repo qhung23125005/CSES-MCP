@@ -1,5 +1,5 @@
 [project]
-name = "cses-mcp"
+name = "qhung-cses-mcp"
 version = "0.1.0"
 description = "An MCP server for browsing CSES problems, submissions, and submitting solutions"
 readme = "README.md"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cses-mcp = "cses_mcp.main:main"
+qhung-cses-mcp = "cses_mcp.main:main"
 
 [build-system]
 requires = ["hatchling"]
