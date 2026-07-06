@@ -11,6 +11,7 @@ logger = setup_logger("cses_mcp.tools.submission_tools")
 
 BASE_URL = f"{settings.cses_base_url}/problemset/submit"
 RESULT_URL = f"{settings.cses_base_url}/problemset/result"
+VIEW_URL = f"{settings.cses_base_url}/problemset/view"
 EXTENSION_TO_LANG = {
     ".asm": "Assembly",
     ".c": "C",
@@ -255,3 +256,106 @@ async def fetch_submission(submission_id: str) -> dict:
         return error_handler.handle_tool_error(
             "fetch_submission", e, {"submission_id": submission_id}
         )
+
+
+def _parse_submission_result(classes: list[str]) -> str:
+    """Map a submission row's <td class="task-score icon ..."> to a result label."""
+    if "full" in classes:
+        return "accepted"
+    if "zero" in classes:
+        return "not accepted"
+    if "compile-err" in classes:
+        return "compile error"
+    return "unknown"
+
+
+def _parse_submission_list(html: str) -> list[dict]:
+    """Pure parsing step, kept separate from the network call so it's unit-testable."""
+    soup = BeautifulSoup(html, "lxml")
+
+    table = soup.find("table", class_="wide")
+    if table is None:
+        raise CSESScrapeError(
+            "Could not find the submissions table; the CSES page structure "
+            "may have changed or the task id is invalid.",
+            error_code="SUBMISSIONS_NOT_FOUND",
+        )
+
+    submissions = []
+    for row in table.find_all("tr"):
+        if row.find("th"):
+            continue
+
+        cells = row.find_all("td")
+        time, lang, code_time, code_size = (c.get_text(strip=True) for c in cells[:4])
+
+        result_cell = cells[4]
+        result = _parse_submission_result(result_cell.get("class", []))
+
+        link_tag = cells[5].find("a")
+        href = link_tag["href"] if link_tag else None
+        submission_id = href.rstrip("/").rsplit("/", 1)[-1] if href else None
+
+        submissions.append({
+            "submission_id": submission_id,
+            "time": time,
+            "lang": lang,
+            "code_time": code_time,
+            "code_size": code_size,
+            "result": result,
+        })
+
+    return submissions
+
+
+@mcp.tool(
+    tags={"submission_tool", "fetch_submission_list"},
+    meta={"version": "0.0.1"}
+)
+async def fetch_submission_list(task_id: str) -> list[dict]:
+    """
+    Fetch your submission history for a CSES task.
+
+    Scrapes https://cses.fi/problemset/view/{task_id}/ (the task's "Results"
+    tab) and returns every past submission you've made for that task, most
+    recent first — each with a submission id (usable with `fetch_submission`
+    to get full details/code/test verdicts), timestamp, language, runtime,
+    code size, and result. Only the first page of results is fetched.
+
+    Args:
+        task_id: The CSES task id, e.g. "2134" (from a problem's URL
+            .../problemset/task/2134).
+
+    Returns:
+        On success, a list of dicts, one per submission, most recent first:
+            {
+                "submission_id": str,
+                "time": str,       # e.g. "2026-07-06 12:04:13"
+                "lang": str,       # e.g. "C++"
+                "code_time": str,  # e.g. "0.34 s", or "--" if not judged/no runtime
+                "code_size": str,  # e.g. "2859 ch."
+                "result": str,     # "accepted", "not accepted", "compile error", or "unknown"
+            }
+
+        On failure (missing/expired session cookie, invalid task id, network
+        error, or the CSES page structure changing), returns a single error
+        dict from error_handler.handle_tool_error with keys "error",
+        "error_code", "message", "timestamp", "tool_name", "tool_args", and
+        "details" — check for `"error": True` before treating the result as
+        a submission list.
+    """
+    try:
+        if not settings.phpsessid:
+            raise CSESAuthError(
+                "No CSES session cookie configured. Set PHPSESSID in the server's .env.",
+                error_code="CSES_NOT_AUTHENTICATED",
+            )
+
+        cookies = {"PHPSESSID": settings.phpsessid}
+        async with httpx.AsyncClient(cookies=cookies, timeout=settings.request_timeout) as client:
+            response = await client.get(f"{VIEW_URL}/{task_id}/")
+            response.raise_for_status()
+
+        return _parse_submission_list(response.text)
+    except Exception as e:
+        return error_handler.handle_tool_error("fetch_submission_list", e, {"task_id": task_id})

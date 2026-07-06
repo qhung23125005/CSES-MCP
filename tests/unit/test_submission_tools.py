@@ -1,6 +1,6 @@
 """
-Tests for the submit_code and fetch_submission tools, with HTTP mocked so no
-real submission ever hits the live CSES site.
+Tests for the submit_code, fetch_submission, and fetch_submission_list
+tools, with HTTP mocked so no real submission ever hits the live CSES site.
 """
 
 import functools
@@ -15,7 +15,9 @@ from src.cses_mcp.config.settings import settings
 from src.cses_mcp.tools.submission_tools import (
     _parse_hidden_fields,
     _parse_submission,
+    _parse_submission_list,
     fetch_submission,
+    fetch_submission_list,
     submit_code,
 )
 
@@ -25,6 +27,10 @@ SUBMIT_FORM_HTML = (
 
 SUBMISSION_RESULT_HTML = (
     Path(__file__).parent.parent / "fixtures" / "cses_submission_result_sample.html"
+).read_text(encoding="utf-8")
+
+SUBMISSION_LIST_HTML = (
+    Path(__file__).parent.parent / "fixtures" / "cses_submission_list_sample.html"
 ).read_text(encoding="utf-8")
 
 
@@ -220,3 +226,111 @@ class TestFetchSubmissionLiveSmoke:
 
         assert result["result"] == "ACCEPTED"
         assert result["task"]["name"] == "Weird Algorithm"
+
+
+class TestParseSubmissionList:
+    """Tier 1: pure parsing logic, no network involved."""
+
+    def test_extracts_all_submissions_most_recent_first(self):
+        submissions = _parse_submission_list(SUBMISSION_LIST_HTML)
+
+        assert submissions == [
+            {
+                "submission_id": "17833589",
+                "time": "2026-07-06 12:04:13",
+                "lang": "C++",
+                "code_time": "0.34 s",
+                "code_size": "2859 ch.",
+                "result": "accepted",
+            },
+            {
+                "submission_id": "17833572",
+                "time": "2026-07-06 12:02:21",
+                "lang": "C++",
+                "code_time": "--",
+                "code_size": "2628 ch.",
+                "result": "not accepted",
+            },
+            {
+                "submission_id": "10079912",
+                "time": "2024-08-05 04:32:04",
+                "lang": "C++",
+                "code_time": "--",
+                "code_size": "1946 ch.",
+                "result": "compile error",
+            },
+        ]
+
+
+class TestFetchSubmissionListTool:
+    """Tier 2: tool wrapper behavior, HTTP mocked so no network is used."""
+
+    @pytest.mark.asyncio
+    async def test_returns_auth_error_when_no_cookie_configured(self, monkeypatch):
+        monkeypatch.setattr(settings, "phpsessid", None)
+
+        result = await fetch_submission_list("2134")
+
+        assert result["error"] is True
+        assert result["error_code"] == "CSES_NOT_AUTHENTICATED"
+
+    @pytest.mark.asyncio
+    async def test_fetches_and_parses_submission_list(self, monkeypatch):
+        monkeypatch.setattr(settings, "phpsessid", "test-cookie-value")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert str(request.url) == "https://cses.fi/problemset/view/2134/"
+            assert "PHPSESSID=test-cookie-value" in request.headers.get("cookie", "")
+            return httpx.Response(200, text=SUBMISSION_LIST_HTML)
+
+        mock_transport = httpx.MockTransport(handler)
+        monkeypatch.setattr(
+            httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=mock_transport)
+        )
+
+        result = await fetch_submission_list("2134")
+
+        assert len(result) == 3
+        assert result[0]["submission_id"] == "17833589"
+        assert result[0]["result"] == "accepted"
+
+    @pytest.mark.asyncio
+    async def test_returns_scrape_error_when_table_missing(self, monkeypatch):
+        monkeypatch.setattr(settings, "phpsessid", "test-cookie-value")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text="<html><body>not found</body></html>")
+
+        mock_transport = httpx.MockTransport(handler)
+        monkeypatch.setattr(
+            httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=mock_transport)
+        )
+
+        result = await fetch_submission_list("nonexistent")
+
+        assert result["error"] is True
+        assert result["error_code"] == "SUBMISSIONS_NOT_FOUND"
+
+
+class TestFetchSubmissionListLiveSmoke:
+    """
+    Tier 3: manual, opt-in smoke test against the real CSES site.
+
+    Skipped unless RUN_LIVE_TESTS=1 is set AND a real PHPSESSID is configured
+    (via the server's .env). Not run as part of the default `make test` since
+    it requires a real, unexpired session cookie and hits the live network.
+    """
+
+    @pytest.mark.skipif(
+        os.environ.get("RUN_LIVE_TESTS") != "1" or not settings.phpsessid,
+        reason="set RUN_LIVE_TESTS=1 and a real PHPSESSID in .env to run this test",
+    )
+    @pytest.mark.asyncio
+    async def test_fetch_submission_list_against_live_site(self):
+        result = await fetch_submission_list("2134")
+
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert {"submission_id", "time", "lang", "code_time", "code_size", "result"} <= result[
+            0
+        ].keys()
