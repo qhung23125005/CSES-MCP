@@ -204,6 +204,20 @@ Once connected, try prompts like:
 - "Complete the remaining unsolved problems in the Tree Algorithms category for me to use as reference."
 - "Can you give me a hint on how to solve \<problem name\>?"
 
+### In action
+
+**"In my CSES account, how many problems I haven't done?"**
+![Progress summary example](docs/imgs/example-progress-summary.png)
+
+**"Can you choose a random problem in Counting Problems for me. Make sure it is easy"**
+![Random-problem hint example](docs/imgs/example-random-problem-hint.png)
+
+**"In my latest submission (back in 2024), I got TLE. Identify why the code run so slow"**
+![Diagnosing a TLE example](docs/imgs/example-diagnose-tle.png)
+
+**"Can you do and submit the first 3 problems for me"**
+![Batch solve-and-submit example](docs/imgs/example-batch-solve-submit.png)
+
 ---
 
 ## 🧪 Testing
